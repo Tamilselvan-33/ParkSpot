@@ -49,7 +49,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // Public endpoints
-                        .requestMatchers("/api/auth/**", "/error", "/index.html", "/style.css", "/app.js", "/**.html", "/**.css", "/**.js").permitAll()
+                        .requestMatchers("/", "/index.html", "/api/auth/**", "/error", "/style.css", "/app.js", "/**.html", "/**.css", "/**.js", "/static/**").permitAll()
 
                         // Flat endpoints
                         .requestMatchers(HttpMethod.POST, "/api/flats").hasRole("ADMIN")

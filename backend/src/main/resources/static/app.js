@@ -1,5 +1,5 @@
 // ========================================================
-// ParkSpot — Frontend Client Logic
+// ParkSpot — Multi-Page Client Logic & Authentication
 // ========================================================
 
 const API_BASE = (window.location.origin.startsWith('http')) 
@@ -7,46 +7,122 @@ const API_BASE = (window.location.origin.startsWith('http'))
     : 'http://localhost:8080';
 
 let authToken = localStorage.getItem('parkspot_token') || '';
-let currentUser = JSON.parse(localStorage.getItem('parkspot_user') || '{"username": "security1", "role": "ROLE_SECURITY"}');
+let currentUser = JSON.parse(localStorage.getItem('parkspot_user') || 'null');
 
 let allSlots = [];
 let activeVisitors = [];
 let allHistoryVisitors = [];
 let allFlats = [];
-let currentFilter = 'ALL';
-let currentTab = 'ACTIVE';
+let currentBayFilter = 'ALL';
+let currentHistoryDate = '';
 
-// Initial startup
-document.addEventListener('DOMContentLoaded', async () => {
+// Startup Lifecycle
+document.addEventListener('DOMContentLoaded', () => {
     initClock();
-    updateUserUI();
 
-    // If no token stored, attempt silent login as demo security guard
-    if (!authToken) {
-        await silentLogin('security1', 'password123');
+    // Check if user is already authenticated
+    if (authToken && currentUser) {
+        showAppShell();
+    } else {
+        showLoginGate();
     }
 
-    await loadInitialData();
-
-    // Auto-refresh slot board every 10 seconds for real-time monitoring
+    // Auto-refresh every 12 seconds when logged in
     setInterval(() => {
-        refreshData(true);
-    }, 10000);
+        if (authToken) {
+            refreshAllData(true);
+        }
+    }, 12000);
 });
 
-// Real-time Clock
+// Real-Time Clock
 function initClock() {
     const clockEl = document.getElementById('live-clock');
     const update = () => {
         const now = new Date();
-        clockEl.textContent = now.toLocaleTimeString();
+        if (clockEl) clockEl.textContent = now.toLocaleTimeString();
     };
     update();
     setInterval(update, 1000);
 }
 
-// Update User UI Badge
-function updateUserUI() {
+// ========================================================
+// AUTHENTICATION & LOGIN GATE
+// ========================================================
+function showLoginGate() {
+    document.getElementById('view-login').style.display = 'flex';
+    document.getElementById('app-shell').style.display = 'none';
+}
+
+function showAppShell() {
+    document.getElementById('view-login').style.display = 'none';
+    document.getElementById('app-shell').style.display = 'block';
+    updateUserBadge();
+    navigateTo('dashboard');
+    refreshAllData();
+}
+
+function quickFillAuth(username, password) {
+    document.getElementById('login-username').value = username;
+    document.getElementById('login-password').value = password;
+}
+
+async function handleAuthSubmit(e) {
+    e.preventDefault();
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+
+    const btn = document.getElementById('btn-login-submit');
+    btn.disabled = true;
+    btn.textContent = 'Authenticating...';
+
+    try {
+        const res = await fetch(`${API_BASE}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            showToast(`⚠️ ${data.message || 'Invalid username or password'}`, 'error');
+            btn.disabled = false;
+            btn.textContent = 'Sign In to ParkSpot';
+            return;
+        }
+
+        // Store JWT and session
+        authToken = data.token;
+        currentUser = { username: data.username, role: data.role };
+        localStorage.setItem('parkspot_token', authToken);
+        localStorage.setItem('parkspot_user', JSON.stringify(currentUser));
+
+        showToast(`Welcome back, ${data.username}!`, 'success');
+        showAppShell();
+    } catch (err) {
+        console.error(err);
+        showToast('Cannot connect to Spring Boot backend.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sign In to ParkSpot';
+    }
+}
+
+function handleLogout() {
+    if (!confirm('Are you sure you want to log out?')) return;
+
+    authToken = '';
+    currentUser = null;
+    localStorage.removeItem('parkspot_token');
+    localStorage.removeItem('parkspot_user');
+
+    showToast('You have been logged out.', 'info');
+    showLoginGate();
+}
+
+function updateUserBadge() {
+    if (!currentUser) return;
     const nameEl = document.getElementById('user-name');
     const roleEl = document.getElementById('user-role');
     const avatarEl = document.getElementById('user-avatar');
@@ -56,29 +132,6 @@ function updateUserUI() {
     if (avatarEl) avatarEl.textContent = currentUser.role.includes('ADMIN') ? '👑' : '👮';
 }
 
-// Initial Data Load
-async function loadInitialData() {
-    await Promise.all([
-        loadSlots(),
-        loadVisitors(),
-        loadFlats(),
-        loadTodayMetrics()
-    ]);
-}
-
-// Refresh Data Trigger
-async function refreshData(silent = false) {
-    await Promise.all([
-        loadSlots(),
-        loadVisitors(),
-        loadTodayMetrics()
-    ]);
-    if (!silent) {
-        showToast('System data refreshed', 'info');
-    }
-}
-
-// Headers helper with JWT Bearer
 function getHeaders() {
     const headers = { 'Content-Type': 'application/json' };
     if (authToken) {
@@ -88,66 +141,187 @@ function getHeaders() {
 }
 
 // ========================================================
-// API Calls: Parking Slots
+// MULTI-PAGE NAVIGATION ROUTER
 // ========================================================
-async function loadSlots() {
+function navigateTo(pageId) {
+    const pages = ['dashboard', 'bays', 'actions', 'history'];
+    
+    pages.forEach(p => {
+        const el = document.getElementById(`page-${p}`);
+        const navBtn = document.getElementById(`nav-${p}`);
+        if (el) el.classList.remove('active');
+        if (navBtn) navBtn.classList.remove('active');
+    });
+
+    const targetPage = document.getElementById(`page-${pageId}`);
+    const targetNav = document.getElementById(`nav-${pageId}`);
+
+    if (targetPage) targetPage.classList.add('active');
+    if (targetNav) targetNav.classList.add('active');
+
+    // Trigger page-specific loads
+    if (pageId === 'dashboard') renderDashboard();
+    if (pageId === 'bays') renderBays();
+    if (pageId === 'actions') renderActionStation();
+    if (pageId === 'history') loadHistoryPage();
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ========================================================
+// DATA LOADING
+// ========================================================
+async function refreshAllData(silent = false) {
+    if (!authToken) return;
     try {
-        const res = await fetch(`${API_BASE}/api/parking-slots`, { headers: getHeaders() });
-        if (res.status === 401) {
-            await silentLogin('security1', 'password123');
-            return loadSlots();
-        }
-        if (!res.ok) throw new Error('Failed to load slots');
-        allSlots = await res.json();
-        renderSlots();
-        updateSlotMetrics();
-        populateSlotDropdown();
+        await Promise.all([
+            loadSlots(),
+            loadVisitors(),
+            loadFlats(),
+            loadDailyStats()
+        ]);
+        renderDashboard();
+        renderBays();
+        renderActionStation();
+        if (!silent) showToast('System refreshed with latest data', 'info');
     } catch (err) {
-        console.error('Error loading slots:', err);
+        console.error('Error refreshing data:', err);
     }
 }
 
-function renderSlots() {
-    const container = document.getElementById('slot-grid');
-    if (!container) return;
+async function loadSlots() {
+    try {
+        const res = await fetch(`${API_BASE}/api/parking-slots`, { headers: getHeaders() });
+        if (res.status === 401) { handleLogout(); return; }
+        if (res.ok) allSlots = await res.json();
+    } catch (e) { console.error(e); }
+}
 
-    let filtered = allSlots;
-    if (currentFilter === 'FREE') filtered = allSlots.filter(s => s.status === 'FREE');
-    if (currentFilter === 'OCCUPIED') filtered = allSlots.filter(s => s.status === 'OCCUPIED');
+async function loadVisitors() {
+    try {
+        const [currRes, histRes] = await Promise.all([
+            fetch(`${API_BASE}/api/visitors/current`, { headers: getHeaders() }),
+            fetch(`${API_BASE}/api/visitors`, { headers: getHeaders() })
+        ]);
+        if (currRes.ok) activeVisitors = await currRes.json();
+        if (histRes.ok) allHistoryVisitors = await histRes.json();
+    } catch (e) { console.error(e); }
+}
 
-    if (filtered.length === 0) {
-        container.innerHTML = `<div class="empty-state">No slots match filter "${currentFilter}".</div>`;
+async function loadFlats() {
+    try {
+        const res = await fetch(`${API_BASE}/api/flats`, { headers: getHeaders() });
+        if (res.ok) allFlats = await res.json();
+    } catch (e) { console.error(e); }
+}
+
+let todayTotalVisits = 0;
+async function loadDailyStats() {
+    try {
+        const res = await fetch(`${API_BASE}/api/reports/daily`, { headers: getHeaders() });
+        if (res.ok) {
+            const data = await res.json();
+            todayTotalVisits = data.totalVisitors;
+        }
+    } catch (e) { console.error(e); }
+}
+
+// ========================================================
+// PAGE 1: DASHBOARD RENDERING
+// ========================================================
+function renderDashboard() {
+    const total = allSlots.length;
+    const free = allSlots.filter(s => s.status === 'FREE').length;
+    const occupied = total - free;
+
+    // Metrics
+    const dTotal = document.getElementById('dash-total-slots');
+    const dFree = document.getElementById('dash-free-slots');
+    const dOcc = document.getElementById('dash-occupied-slots');
+    const dVisits = document.getElementById('dash-today-visits');
+
+    if (dTotal) dTotal.textContent = total;
+    if (dFree) dFree.textContent = free;
+    if (dOcc) dOcc.textContent = occupied;
+    if (dVisits) dVisits.textContent = todayTotalVisits;
+
+    // Capacity Gauge
+    const pct = total > 0 ? Math.round((occupied / total) * 100) : 0;
+    const rateEl = document.getElementById('dash-occupancy-rate');
+    const fillEl = document.getElementById('dash-progress-fill');
+    const legFree = document.getElementById('dash-legend-free');
+    const legOcc = document.getElementById('dash-legend-occ');
+
+    if (rateEl) rateEl.textContent = `${pct}% Full`;
+    if (fillEl) fillEl.style.width = `${pct}%`;
+    if (legFree) legFree.textContent = free;
+    if (legOcc) legOcc.textContent = occupied;
+
+    // Active Table Preview
+    const tbody = document.getElementById('dash-active-tbody');
+    if (!tbody) return;
+
+    if (activeVisitors.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 18px;">No visitor vehicles currently inside society.</td></tr>`;
         return;
     }
 
-    container.innerHTML = filtered.map(slot => {
-        const isFree = slot.status === 'FREE';
-        const cardClass = isFree ? 'status-free' : 'status-occupied';
-        const badgeClass = isFree ? 'badge-free' : 'badge-occupied';
+    tbody.innerHTML = activeVisitors.slice(0, 5).map(v => `
+        <tr>
+            <td><span class="plate-cell">${escapeHtml(v.vehicleNumber)}</span></td>
+            <td><span class="flat-badge">Slot ${v.slotNumber}</span></td>
+            <td>Flat ${escapeHtml(v.flatNumber)}</td>
+            <td><span class="time-stamp">${formatTime(v.entryTime)}</span></td>
+            <td>
+                <button class="btn btn-danger btn-xs" onclick="checkoutVehicle(${v.id})">
+                    🚪 Exit
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
 
+// ========================================================
+// PAGE 2: PARKING BAYS RENDERING
+// ========================================================
+function renderBays() {
+    const grid = document.getElementById('bay-grid');
+    if (!grid) return;
+
+    let list = allSlots;
+    if (currentBayFilter === 'FREE') list = allSlots.filter(s => s.status === 'FREE');
+    if (currentBayFilter === 'OCCUPIED') list = allSlots.filter(s => s.status === 'OCCUPIED');
+
+    if (list.length === 0) {
+        grid.innerHTML = `<div class="empty-state">No parking bays match the filter "${currentBayFilter}".</div>`;
+        return;
+    }
+
+    grid.innerHTML = list.map(slot => {
+        const isFree = slot.status === 'FREE';
         return `
-            <div class="slot-card ${cardClass}" id="slot-card-${slot.slotNumber}" 
-                 onclick="${isFree ? `quickParkOnSlot(${slot.id}, ${slot.slotNumber})` : ''}">
+            <div class="slot-card ${isFree ? 'status-free' : 'status-occupied'}" 
+                 onclick="${isFree ? `goToAssignSlot(${slot.id})` : ''}">
                 <div class="slot-card-top">
                     <span class="slot-number-badge">Bay #${slot.slotNumber}</span>
-                    <span class="slot-badge ${badgeClass}">${slot.status}</span>
+                    <span class="slot-badge ${isFree ? 'badge-free' : 'badge-occupied'}">${slot.status}</span>
                 </div>
 
                 ${isFree ? `
                     <div class="slot-free-hint">
                         <span>👉 Click to park here</span>
                     </div>
-                    <button class="btn btn-secondary btn-xs btn-block" onclick="quickParkOnSlot(${slot.id}, ${slot.slotNumber})">
-                        + Assign Slot
+                    <button class="btn btn-secondary btn-xs btn-block" onclick="event.stopPropagation(); goToAssignSlot(${slot.id})">
+                        + Assign Bay
                     </button>
                 ` : `
                     <div class="number-plate">${escapeHtml(slot.vehicleNumber || 'OCCUPIED')}</div>
                     <div class="slot-details">
-                        <span>Visiting Flat: <strong>${escapeHtml(slot.flatNumber || 'N/A')}</strong></span>
-                        <span>Parked: <strong>${formatTime(slot.entryTime)}</strong></span>
+                        <span>Flat Visited: <strong>Flat ${escapeHtml(slot.flatNumber || 'N/A')}</strong></span>
+                        <span>Parked At: <strong>${formatTime(slot.entryTime)}</strong></span>
                     </div>
-                    <button class="btn btn-danger btn-xs btn-block" onclick="event.stopPropagation(); handleExit(${slot.visitorId})">
-                        🚪 Mark Exit
+                    <button class="btn btn-danger btn-xs btn-block" onclick="event.stopPropagation(); checkoutVehicle(${slot.visitorId})">
+                        🚪 Mark Exit & Free Bay
                     </button>
                 `}
             </div>
@@ -155,191 +329,63 @@ function renderSlots() {
     }).join('');
 }
 
-function filterSlots(filterType, btn) {
-    currentFilter = filterType;
-    document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
+function filterBays(filter, btn) {
+    currentBayFilter = filter;
+    document.querySelectorAll('.slot-filters .filter-pill').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    renderSlots();
+    renderBays();
 }
 
-function updateSlotMetrics() {
-    const totalEl = document.getElementById('stat-total-slots');
-    const freeEl = document.getElementById('stat-free-slots');
-    const occEl = document.getElementById('stat-occupied-slots');
-
-    const total = allSlots.length;
-    const free = allSlots.filter(s => s.status === 'FREE').length;
-    const occupied = total - free;
-
-    if (totalEl) totalEl.textContent = total;
-    if (freeEl) freeEl.textContent = free;
-    if (occEl) occEl.textContent = occupied;
+function goToAssignSlot(slotId) {
+    navigateTo('actions');
+    const slotSelect = document.getElementById('station-select-slot');
+    if (slotSelect) slotSelect.value = slotId;
 }
 
 // ========================================================
-// API Calls: Visitors & History
+// PAGE 3: QUICK ACTIONS STATION
 // ========================================================
-async function loadVisitors() {
-    try {
-        const [activeRes, historyRes] = await Promise.all([
-            fetch(`${API_BASE}/api/visitors/current`, { headers: getHeaders() }),
-            fetch(`${API_BASE}/api/visitors`, { headers: getHeaders() })
-        ]);
+function renderActionStation() {
+    populateStationDropdowns();
+    renderCheckoutList();
+}
 
-        if (activeRes.ok) activeVisitors = await activeRes.json();
-        if (historyRes.ok) allHistoryVisitors = await historyRes.json();
+function populateStationDropdowns() {
+    // Populate flats
+    const flatSelect = document.getElementById('station-select-flat');
+    if (flatSelect) {
+        const currentVal = flatSelect.value;
+        flatSelect.innerHTML = '<option value="">Select Flat...</option>' +
+            allFlats.map(f => `<option value="${f.id}">Flat ${f.flatNumber} (${escapeHtml(f.residentName)})</option>`).join('');
+        if (currentVal) flatSelect.value = currentVal;
+    }
 
-        const activeBadge = document.getElementById('active-count-badge');
-        if (activeBadge) activeBadge.textContent = activeVisitors.length;
-
-        renderVisitorsTable();
-    } catch (err) {
-        console.error('Error loading visitors:', err);
+    // Populate free slots
+    const slotSelect = document.getElementById('station-select-slot');
+    if (slotSelect) {
+        const currentVal = slotSelect.value;
+        const freeSlots = allSlots.filter(s => s.status === 'FREE');
+        slotSelect.innerHTML = '<option value="">Select Free Slot...</option>' +
+            freeSlots.map(s => `<option value="${s.id}">Slot ${s.slotNumber} (Available)</option>`).join('');
+        if (currentVal) slotSelect.value = currentVal;
     }
 }
 
-function renderVisitorsTable(itemsToRender = null) {
-    const tbody = document.getElementById('visitors-tbody');
-    const thAction = document.getElementById('th-exit-or-status');
-    if (!tbody) return;
-
-    const list = itemsToRender || (currentTab === 'ACTIVE' ? activeVisitors : allHistoryVisitors);
-
-    if (thAction) {
-        thAction.textContent = currentTab === 'ACTIVE' ? 'Action' : 'Exit Time / Status';
-    }
-
-    if (list.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">No visitor records found.</td></tr>`;
-        return;
-    }
-
-    tbody.innerHTML = list.map(v => {
-        const isParked = v.status === 'PARKED';
-        return `
-            <tr id="visitor-row-${v.id}">
-                <td><span class="plate-cell">${escapeHtml(v.vehicleNumber)}</span></td>
-                <td><span class="flat-badge">Slot ${v.slotNumber}</span></td>
-                <td>Flat ${escapeHtml(v.flatNumber)}</td>
-                <td>${escapeHtml(v.residentName)}</td>
-                <td><span class="time-stamp">${formatDateTime(v.entryTime)}</span></td>
-                <td>
-                    ${currentTab === 'ACTIVE' ? `
-                        <button class="btn btn-danger btn-xs" onclick="handleExit(${v.id})">
-                            🚪 Mark Exit
-                        </button>
-                    ` : `
-                        ${isParked ? `
-                            <span class="slot-badge badge-occupied">Still Inside</span>
-                        ` : `
-                            <span class="time-stamp">${formatDateTime(v.exitTime)}</span>
-                        `}
-                    `}
-                </td>
-            </tr>
-        `;
-    }).join('');
-}
-
-function switchVisitorTab(tab) {
-    currentTab = tab;
-    const tabActiveBtn = document.getElementById('tab-active-btn');
-    const tabHistoryBtn = document.getElementById('tab-history-btn');
-    const searchContainer = document.getElementById('history-search-container');
-
-    if (tab === 'ACTIVE') {
-        tabActiveBtn.classList.add('active');
-        tabHistoryBtn.classList.remove('active');
-        if (searchContainer) searchContainer.style.display = 'none';
-    } else {
-        tabActiveBtn.classList.remove('active');
-        tabHistoryBtn.classList.add('active');
-        if (searchContainer) searchContainer.style.display = 'block';
-    }
-
-    renderVisitorsTable();
-}
-
-function handleSearchVisitors(query) {
-    const q = query.trim().toLowerCase();
-    if (!q) {
-        renderVisitorsTable();
-        return;
-    }
-    const filtered = allHistoryVisitors.filter(v =>
-        v.vehicleNumber.toLowerCase().includes(q) ||
-        v.flatNumber.toLowerCase().includes(q) ||
-        v.residentName.toLowerCase().includes(q) ||
-        String(v.slotNumber).includes(q)
-    );
-    renderVisitorsTable(filtered);
-}
-
-// ========================================================
-// API Calls: Flats & Dropdowns
-// ========================================================
-async function loadFlats() {
-    try {
-        const res = await fetch(`${API_BASE}/api/flats`, { headers: getHeaders() });
-        if (res.ok) {
-            allFlats = await res.json();
-            populateFlatDropdown();
-        }
-    } catch (err) {
-        console.error('Error loading flats:', err);
+function updatePlatePreview(val) {
+    const previewEl = document.getElementById('preview-plate-text');
+    if (previewEl) {
+        previewEl.textContent = val.trim().toUpperCase() || 'TN 38 AB 1234';
     }
 }
 
-function populateFlatDropdown() {
-    const select = document.getElementById('select-flat');
-    if (!select) return;
-    select.innerHTML = '<option value="">Select Flat...</option>' +
-        allFlats.map(f => `<option value="${f.id}">Flat ${f.flatNumber} — ${escapeHtml(f.residentName)}</option>`).join('');
-}
-
-function populateSlotDropdown(selectedSlotId = null) {
-    const select = document.getElementById('select-slot');
-    if (!select) return;
-
-    const freeSlots = allSlots.filter(s => s.status === 'FREE');
-
-    select.innerHTML = '<option value="">Select Free Slot...</option>' +
-        freeSlots.map(s => `
-            <option value="${s.id}" ${selectedSlotId && selectedSlotId === s.id ? 'selected' : ''}>
-                Slot ${s.slotNumber} (Available)
-            </option>
-        `).join('');
-}
-
-async function loadTodayMetrics() {
-    try {
-        const res = await fetch(`${API_BASE}/api/reports/daily`, { headers: getHeaders() });
-        if (res.ok) {
-            const data = await res.json();
-            const visitsEl = document.getElementById('stat-today-visits');
-            if (visitsEl) visitsEl.textContent = data.totalVisitors;
-        }
-    } catch (err) {
-        console.error('Error loading daily metrics:', err);
-    }
-}
-
-// ========================================================
-// User Actions: Log Entry & Mark Exit
-// ========================================================
-function quickParkOnSlot(slotId, slotNumber) {
-    openEntryModal();
-    populateSlotDropdown(slotId);
-}
-
-async function handleRegisterEntry(e) {
+async function handleStationEntry(e) {
     e.preventDefault();
-    const vehicleNumber = document.getElementById('input-vehicle-number').value.trim().toUpperCase();
-    const flatId = parseInt(document.getElementById('select-flat').value, 10);
-    const slotId = parseInt(document.getElementById('select-slot').value, 10);
+    const vehicleNumber = document.getElementById('station-vehicle-number').value.trim().toUpperCase();
+    const flatId = parseInt(document.getElementById('station-select-flat').value, 10);
+    const slotId = parseInt(document.getElementById('station-select-slot').value, 10);
 
     if (!vehicleNumber || !flatId || !slotId) {
-        showToast('Please fill all fields', 'error');
+        showToast('Please complete all check-in fields', 'error');
         return;
     }
 
@@ -353,29 +399,68 @@ async function handleRegisterEntry(e) {
         const data = await res.json();
 
         if (res.status === 409) {
-            // Business rule: Slot occupied!
+            // Strict business rule violation
             showToast(`🛑 ${data.message || 'Slot is already occupied!'}`, 'error');
             return;
         }
 
         if (!res.ok) {
-            showToast(`⚠️ ${data.message || 'Failed to register entry'}`, 'error');
+            showToast(`⚠️ ${data.message || 'Entry check-in failed'}`, 'error');
             return;
         }
 
-        showToast(`✅ Vehicle ${data.vehicleNumber} parked in Slot ${data.slotNumber}!`, 'success');
-        closeModal('modal-entry');
-        document.getElementById('form-entry').reset();
+        showToast(`✅ Vehicle ${data.vehicleNumber} checked in to Slot ${data.slotNumber}!`, 'success');
+        document.getElementById('action-entry-form').reset();
+        updatePlatePreview('');
 
-        await refreshData(true);
+        await refreshAllData(true);
     } catch (err) {
         console.error(err);
-        showToast('Network error while logging entry.', 'error');
+        showToast('Network error while checking in vehicle.', 'error');
     }
 }
 
-async function handleExit(visitorId) {
-    if (!confirm('Confirm vehicle exit? This will record the exit timestamp and free the parking slot.')) {
+function renderCheckoutList(filteredList = null) {
+    const listContainer = document.getElementById('checkout-vehicle-list');
+    if (!listContainer) return;
+
+    const items = filteredList || activeVisitors;
+
+    if (items.length === 0) {
+        listContainer.innerHTML = `<div class="empty-state" style="padding: 24px; text-align: center; color: var(--text-muted);">No parked vehicles ready for checkout.</div>`;
+        return;
+    }
+
+    listContainer.innerHTML = items.map(v => `
+        <div class="checkout-item-card">
+            <div class="checkout-vehicle-info">
+                <span class="checkout-plate">${escapeHtml(v.vehicleNumber)}</span>
+                <span class="checkout-sub">Parked in <strong>Slot ${v.slotNumber}</strong> &bull; Flat ${escapeHtml(v.flatNumber)}</span>
+                <span class="time-stamp">Arrived: ${formatTime(v.entryTime)}</span>
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="checkoutVehicle(${v.id})">
+                🚪 Check Out
+            </button>
+        </div>
+    `).join('');
+}
+
+function filterCheckoutList(query) {
+    const q = query.trim().toLowerCase();
+    if (!q) {
+        renderCheckoutList();
+        return;
+    }
+    const filtered = activeVisitors.filter(v =>
+        v.vehicleNumber.toLowerCase().includes(q) ||
+        v.flatNumber.toLowerCase().includes(q) ||
+        String(v.slotNumber).includes(q)
+    );
+    renderCheckoutList(filtered);
+}
+
+async function checkoutVehicle(visitorId) {
+    if (!confirm('Confirm vehicle check-out? This will record the exit time and free the parking slot.')) {
         return;
     }
 
@@ -388,149 +473,132 @@ async function handleExit(visitorId) {
         const data = await res.json();
 
         if (!res.ok) {
-            showToast(`⚠️ ${data.message || 'Failed to record exit'}`, 'error');
+            showToast(`⚠️ ${data.message || 'Check-out failed'}`, 'error');
             return;
         }
 
         showToast(`🚪 Vehicle ${data.vehicleNumber} checked out! Slot ${data.slotNumber} is now FREE.`, 'success');
-        await refreshData(true);
+        await refreshAllData(true);
     } catch (err) {
         console.error(err);
-        showToast('Network error while recording exit.', 'error');
+        showToast('Network error during checkout.', 'error');
     }
 }
 
 // ========================================================
-// Daily Report
+// PAGE 4: VISITOR HISTORY & REPORTS
 // ========================================================
-async function openReportModal() {
-    const dateInput = document.getElementById('report-date-input');
+let currentHistoryData = [];
+
+async function loadHistoryPage() {
+    const picker = document.getElementById('history-date-picker');
     const today = new Date().toISOString().split('T')[0];
-    dateInput.value = today;
-    await loadDailyReport(today);
-    openModal('modal-report');
+    if (picker && !picker.value) {
+        picker.value = today;
+    }
+    await loadDailyHistoryReport(picker ? picker.value : today);
 }
 
-async function loadDailyReport(dateStr) {
+async function handleHistoryDateChange(dateStr) {
     if (!dateStr) return;
+    await loadDailyHistoryReport(dateStr);
+}
+
+async function resetHistoryFilters() {
+    const picker = document.getElementById('history-date-picker');
+    if (picker) picker.value = '';
+    
+    document.getElementById('hist-selected-date').textContent = 'All Records';
+    currentHistoryData = allHistoryVisitors;
+    
+    const total = currentHistoryData.length;
+    const parked = currentHistoryData.filter(v => v.status === 'PARKED').length;
+    const exited = total - parked;
+
+    document.getElementById('hist-stat-total').textContent = total;
+    document.getElementById('hist-stat-parked').textContent = parked;
+    document.getElementById('hist-stat-exited').textContent = exited;
+
+    renderHistoryTable(currentHistoryData);
+}
+
+async function loadDailyHistoryReport(dateStr) {
+    document.getElementById('hist-selected-date').textContent = dateStr;
     try {
         const res = await fetch(`${API_BASE}/api/reports/daily?date=${dateStr}`, { headers: getHeaders() });
-        if (!res.ok) throw new Error('Failed to load report');
+        if (!res.ok) throw new Error('Report error');
         const data = await res.json();
 
-        document.getElementById('rep-stat-total').textContent = data.totalVisitors;
-        document.getElementById('rep-stat-inside').textContent = data.currentlyParked;
-        document.getElementById('rep-stat-exited').textContent = data.completedVisits;
+        document.getElementById('hist-stat-total').textContent = data.totalVisitors;
+        document.getElementById('hist-stat-parked').textContent = data.currentlyParked;
+        document.getElementById('hist-stat-exited').textContent = data.completedVisits;
 
-        const tbody = document.getElementById('report-tbody');
-        if (data.visitors.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No visits recorded on ${dateStr}.</td></tr>`;
-            return;
-        }
+        currentHistoryData = data.visitors;
+        renderHistoryTable(currentHistoryData);
+    } catch (err) {
+        console.error('Error loading history:', err);
+    }
+}
 
-        tbody.innerHTML = data.visitors.map(v => `
+function renderHistoryTable(list) {
+    const tbody = document.getElementById('history-tbody');
+    const countEl = document.getElementById('history-records-count');
+    if (!tbody) return;
+
+    if (countEl) countEl.textContent = `Showing ${list.length} records`;
+
+    if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 28px;">No visitor records found for this selection.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = list.map(v => {
+        const isParked = v.status === 'PARKED';
+        return `
             <tr>
                 <td><span class="plate-cell">${escapeHtml(v.vehicleNumber)}</span></td>
                 <td><span class="flat-badge">Slot ${v.slotNumber}</span></td>
                 <td>Flat ${escapeHtml(v.flatNumber)}</td>
                 <td>${escapeHtml(v.residentName)}</td>
-                <td><span class="time-stamp">${formatTime(v.entryTime)}</span></td>
-                <td><span class="time-stamp">${v.exitTime ? formatTime(v.exitTime) : '—'}</span></td>
+                <td><span class="time-stamp">${formatDateTime(v.entryTime)}</span></td>
+                <td><span class="time-stamp">${v.exitTime ? formatDateTime(v.exitTime) : '—'}</span></td>
                 <td>
-                    <span class="slot-badge ${v.status === 'PARKED' ? 'badge-occupied' : 'badge-free'}">
-                        ${v.status}
+                    <span class="slot-badge ${isParked ? 'badge-occupied' : 'badge-free'}">
+                        ${isParked ? 'Inside' : 'Exited'}
                     </span>
                 </td>
+                <td>
+                    ${isParked ? `
+                        <button class="btn btn-danger btn-xs" onclick="checkoutVehicle(${v.id})">
+                            🚪 Mark Exit
+                        </button>
+                    ` : `
+                        <span style="color: var(--text-muted); font-size: 0.75rem;">Completed</span>
+                    `}
+                </td>
             </tr>
-        `).join('');
-    } catch (err) {
-        console.error('Error loading report:', err);
-        showToast('Could not load daily report.', 'error');
+        `;
+    }).join('');
+}
+
+function filterHistoryTable(query) {
+    const q = query.trim().toLowerCase();
+    if (!q) {
+        renderHistoryTable(currentHistoryData);
+        return;
     }
+    const filtered = currentHistoryData.filter(v =>
+        v.vehicleNumber.toLowerCase().includes(q) ||
+        v.flatNumber.toLowerCase().includes(q) ||
+        v.residentName.toLowerCase().includes(q) ||
+        String(v.slotNumber).includes(q)
+    );
+    renderHistoryTable(filtered);
 }
 
 // ========================================================
-// Authentication
+// TOAST & FORMATTING HELPERS
 // ========================================================
-async function silentLogin(username, password) {
-    try {
-        const res = await fetch(`${API_BASE}/api/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-        });
-        if (res.ok) {
-            const data = await res.json();
-            authToken = data.token;
-            currentUser = { username: data.username, role: data.role };
-            localStorage.setItem('parkspot_token', authToken);
-            localStorage.setItem('parkspot_user', JSON.stringify(currentUser));
-            updateUserUI();
-        }
-    } catch (e) {
-        console.warn('Silent login unavailable:', e);
-    }
-}
-
-async function handleLogin(e) {
-    e.preventDefault();
-    const username = document.getElementById('input-username').value.trim();
-    const password = document.getElementById('input-password').value;
-
-    try {
-        const res = await fetch(`${API_BASE}/api/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-        });
-        const data = await res.json();
-
-        if (!res.ok) {
-            showToast(`⚠️ ${data.message || 'Login failed'}`, 'error');
-            return;
-        }
-
-        authToken = data.token;
-        currentUser = { username: data.username, role: data.role };
-        localStorage.setItem('parkspot_token', authToken);
-        localStorage.setItem('parkspot_user', JSON.stringify(currentUser));
-
-        updateUserUI();
-        closeModal('modal-auth');
-        showToast(`Logged in as ${currentUser.username} (${currentUser.role})`, 'success');
-        await refreshData(true);
-    } catch (err) {
-        showToast('Failed to authenticate with server', 'error');
-    }
-}
-
-function fillCredentials(user, pass) {
-    document.getElementById('input-username').value = user;
-    document.getElementById('input-password').value = pass;
-}
-
-// ========================================================
-// Helpers & Utilities
-// ========================================================
-function openModal(id) {
-    const modal = document.getElementById(id);
-    if (modal) modal.classList.add('active');
-}
-
-function closeModal(id) {
-    const modal = document.getElementById(id);
-    if (modal) modal.classList.remove('active');
-}
-
-function openEntryModal() {
-    populateSlotDropdown();
-    openModal('modal-entry');
-}
-
-function toggleAuthModal() {
-    openModal('modal-auth');
-}
-
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     if (!container) return;
@@ -543,7 +611,7 @@ function showToast(message, type = 'info') {
     setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transform = 'translateX(100%)';
-        setTimeout(() => toast.remove(), 300);
+        setTimeout(() => toast.remove(), 250);
     }, 4000);
 }
 

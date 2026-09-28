@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ParkSpot — Society Visitor Parking Tracker</title>
-    <meta name="description" content="A real-time smart visitor parking slot tracking and society access management system.">
+    <title>ParkSpot — Society Visitor Parking Management</title>
+    <meta name="description" content="Secure, real-time residential visitor parking slot management system.">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,32 +12,99 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Background glowing ambient orbs -->
+    <!-- Ambient Background Lighting -->
     <div class="bg-orb orb-primary"></div>
     <div class="bg-orb orb-secondary"></div>
 
-    <div class="app-container">
+    <!-- ========================================================
+         VIEW 1: SIGN IN / LOGIN GATE (First screen user sees)
+         ======================================================== -->
+    <section class="auth-gate-screen" id="view-login">
+        <div class="auth-card">
+            <div class="auth-brand">
+                <div class="brand-icon lg">
+                    <span class="pulse-ring"></span>
+                    🚘
+                </div>
+                <h1 class="auth-title">Park<span>Spot</span></h1>
+                <p class="auth-subtitle">Society Visitor Parking Management System</p>
+            </div>
+
+            <div class="auth-body">
+                <form id="login-form" onsubmit="handleAuthSubmit(event)">
+                    <div class="form-group">
+                        <label for="login-username">Username</label>
+                        <div class="input-with-icon">
+                            <span class="input-icon">👤</span>
+                            <input type="text" id="login-username" class="form-control" placeholder="Enter username (e.g. security1 or admin)" required autocomplete="username">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <div class="input-with-icon">
+                            <span class="input-icon">🔒</span>
+                            <input type="password" id="login-password" class="form-control" placeholder="Enter password" required autocomplete="current-password">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-block btn-lg" id="btn-login-submit">
+                        Sign In to ParkSpot
+                    </button>
+                </form>
+
+                <div class="demo-logins-box">
+                    <span class="demo-hint">Quick Demo Credentials (1-Click Fill):</span>
+                    <div class="demo-buttons">
+                        <button type="button" class="btn btn-secondary btn-xs" onclick="quickFillAuth('security1', 'password123')">
+                            👮 Security Guard (security1)
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-xs" onclick="quickFillAuth('admin', 'admin123')">
+                            👑 Admin (admin)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========================================================
+         MAIN APPLICATION SHELL (Hidden until logged in)
+         ======================================================== -->
+    <div class="app-shell" id="app-shell" style="display: none;">
         <!-- Top Navigation Bar -->
         <header class="navbar">
-            <div class="brand">
+            <div class="brand" onclick="navigateTo('dashboard')">
                 <div class="brand-icon">
                     <span class="pulse-ring"></span>
                     🚘
                 </div>
                 <div>
-                    <h1 class="brand-title">Park<span>Spot</span></h1>
-                    <p class="brand-tagline">Society Visitor Parking Tracker</p>
+                    <h2 class="brand-title">Park<span>Spot</span></h2>
+                    <p class="brand-tagline">Society Visitor Parking</p>
                 </div>
             </div>
 
-            <div class="nav-center">
+            <!-- Page Navigation Tabs -->
+            <nav class="nav-links">
+                <button class="nav-link-btn active" id="nav-dashboard" onclick="navigateTo('dashboard')">
+                    <span class="nav-icon">📊</span> Dashboard
+                </button>
+                <button class="nav-link-btn" id="nav-bays" onclick="navigateTo('bays')">
+                    <span class="nav-icon">🅿️</span> Parking Bays
+                </button>
+                <button class="nav-link-btn" id="nav-actions" onclick="navigateTo('actions')">
+                    <span class="nav-icon">⚡</span> Quick Actions
+                </button>
+                <button class="nav-link-btn" id="nav-history" onclick="navigateTo('history')">
+                    <span class="nav-icon">📋</span> Visitor History
+                </button>
+            </nav>
+
+            <!-- User Info, Clock & Logout -->
+            <div class="nav-user-panel">
                 <div class="live-clock" id="live-clock">--:--:--</div>
-                <div class="status-pill live-indicator">
-                    <span class="blinking-dot"></span> System Live
-                </div>
-            </div>
-
-            <div class="nav-actions">
+                
                 <div class="user-badge" id="user-badge">
                     <span class="user-avatar" id="user-avatar">👮</span>
                     <div class="user-info">
@@ -45,257 +112,306 @@
                         <span class="user-role" id="user-role">SECURITY</span>
                     </div>
                 </div>
-                <button class="btn btn-secondary" id="btn-auth" onclick="toggleAuthModal()">Switch User</button>
+
+                <button class="btn btn-logout" onclick="handleLogout()" title="Log out from system">
+                    <span>🚪</span> Logout
+                </button>
             </div>
         </header>
 
-        <!-- Metrics Overview Section -->
-        <section class="metrics-grid">
-            <div class="metric-card" id="metric-total-card">
-                <div class="metric-icon bg-indigo">🅿️</div>
-                <div class="metric-content">
-                    <span class="metric-label">Total Slots</span>
-                    <h2 class="metric-value" id="stat-total-slots">--</h2>
-                    <span class="metric-sub">Dedicated visitor bays</span>
+        <!-- ========================================================
+             PAGE 1: DASHBOARD (Summary, Metrics, Quick View)
+             ======================================================== -->
+        <section class="page-view active" id="page-dashboard">
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title">Executive Dashboard</h2>
+                    <p class="page-subtitle">Real-time society parking occupancy, metrics, and capacity analytics.</p>
+                </div>
+                <div class="page-actions-right">
+                    <span class="status-pill live-indicator">
+                        <span class="blinking-dot"></span> System Live
+                    </span>
+                    <button class="btn btn-secondary btn-sm" onclick="refreshAllData()">
+                        🔄 Refresh
+                    </button>
                 </div>
             </div>
 
-            <div class="metric-card metric-card-free" id="metric-free-card">
-                <div class="metric-icon bg-emerald">✅</div>
-                <div class="metric-content">
-                    <span class="metric-label">Available Slots</span>
-                    <h2 class="metric-value text-emerald" id="stat-free-slots">--</h2>
-                    <span class="metric-sub">Ready for check-in</span>
-                </div>
-            </div>
-
-            <div class="metric-card metric-card-occupied" id="metric-occupied-card">
-                <div class="metric-icon bg-rose">🚘</div>
-                <div class="metric-content">
-                    <span class="metric-label">Occupied Slots</span>
-                    <h2 class="metric-value text-rose" id="stat-occupied-slots">--</h2>
-                    <span class="metric-sub">Currently inside society</span>
-                </div>
-            </div>
-
-            <div class="metric-card" id="metric-visits-card">
-                <div class="metric-icon bg-amber">📊</div>
-                <div class="metric-content">
-                    <span class="metric-label">Today's Visits</span>
-                    <h2 class="metric-value text-amber" id="stat-today-visits">--</h2>
-                    <span class="metric-sub">Logged entries today</span>
-                </div>
-            </div>
-        </section>
-
-        <!-- Main Content Area -->
-        <main class="main-layout">
-            <!-- Left / Top: Interactive Parking Slot Bay -->
-            <section class="card slot-bay-card">
-                <div class="card-header">
-                    <div>
-                        <h3 class="card-title">Live Parking Bay Overview</h3>
-                        <p class="card-subtitle">Real-time status of all numbered society visitor parking slots</p>
-                    </div>
-                    <div class="slot-filters">
-                        <button class="filter-pill active" data-filter="ALL" onclick="filterSlots('ALL', this)">All</button>
-                        <button class="filter-pill" data-filter="FREE" onclick="filterSlots('FREE', this)">Available</button>
-                        <button class="filter-pill" data-filter="OCCUPIED" onclick="filterSlots('OCCUPIED', this)">Occupied</button>
+            <!-- Metrics Cards -->
+            <div class="metrics-grid">
+                <div class="metric-card" onclick="navigateTo('bays')">
+                    <div class="metric-icon bg-indigo">🅿️</div>
+                    <div class="metric-content">
+                        <span class="metric-label">Total Numbered Bays</span>
+                        <h3 class="metric-value" id="dash-total-slots">--</h3>
+                        <span class="metric-sub">Dedicated visitor slots</span>
                     </div>
                 </div>
 
-                <div class="slot-grid" id="slot-grid">
-                    <!-- Populated dynamically via JS -->
-                    <div class="loading-state">Loading parking slots...</div>
+                <div class="metric-card metric-card-free" onclick="navigateTo('bays')">
+                    <div class="metric-icon bg-emerald">✅</div>
+                    <div class="metric-content">
+                        <span class="metric-label">Available Slots</span>
+                        <h3 class="metric-value text-emerald" id="dash-free-slots">--</h3>
+                        <span class="metric-sub">Ready for check-in</span>
+                    </div>
                 </div>
-            </section>
 
-            <!-- Right / Bottom: Action Bar & Active Visitors Board -->
-            <section class="content-split">
-                <!-- Action Controls -->
-                <div class="card actions-card">
+                <div class="metric-card metric-card-occupied" onclick="navigateTo('bays')">
+                    <div class="metric-icon bg-rose">🚘</div>
+                    <div class="metric-content">
+                        <span class="metric-label">Occupied Slots</span>
+                        <h3 class="metric-value text-rose" id="dash-occupied-slots">--</h3>
+                        <span class="metric-sub">Vehicles currently parked</span>
+                    </div>
+                </div>
+
+                <div class="metric-card" onclick="navigateTo('history')">
+                    <div class="metric-icon bg-amber">📈</div>
+                    <div class="metric-content">
+                        <span class="metric-label">Today's Visits</span>
+                        <h3 class="metric-value text-amber" id="dash-today-visits">--</h3>
+                        <span class="metric-sub">Total vehicles logged today</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Capacity Progress & Quick Highlights -->
+            <div class="dashboard-split">
+                <!-- Left: Occupancy Gauge Card -->
+                <div class="card">
                     <div class="card-header">
-                        <h3 class="card-title">Quick Actions</h3>
+                        <h4 class="card-title">Real-time Bay Capacity</h4>
+                        <span class="occupancy-pct" id="dash-occupancy-rate">0% Full</span>
                     </div>
-                    <div class="actions-wrapper">
-                        <button class="btn btn-primary btn-block" id="btn-open-entry-modal" onclick="openEntryModal()">
-                            <span class="btn-icon">➕</span> Log Vehicle Entry
+                    <div class="progress-bar-container">
+                        <div class="progress-bar-fill" id="dash-progress-fill" style="width: 0%;"></div>
+                    </div>
+                    <div class="capacity-legend">
+                        <div class="legend-item"><span class="legend-dot dot-free"></span> Available: <strong id="dash-legend-free">0</strong></div>
+                        <div class="legend-item"><span class="legend-dot dot-occupied"></span> Occupied: <strong id="dash-legend-occ">0</strong></div>
+                    </div>
+
+                    <div class="dashboard-quick-ctas">
+                        <button class="btn btn-primary btn-block" onclick="navigateTo('actions')">
+                            ➕ Register Vehicle Entry
                         </button>
-                        <button class="btn btn-secondary btn-block" id="btn-open-report-modal" onclick="openReportModal()">
-                            <span class="btn-icon">📋</span> Daily Visitor Report
-                        </button>
-                        <button class="btn btn-secondary btn-block" id="btn-refresh-all" onclick="refreshData()">
-                            <span class="btn-icon">🔄</span> Refresh System
+                        <button class="btn btn-secondary btn-block" onclick="navigateTo('bays')">
+                            👀 Inspect Parking Bays
                         </button>
                     </div>
                 </div>
 
-                <!-- Active Visitors Tracker -->
-                <div class="card visitors-card">
+                <!-- Right: Currently Parked Summary Table -->
+                <div class="card">
                     <div class="card-header">
-                        <div class="tabs-header">
-                            <button class="tab-btn active" id="tab-active-btn" onclick="switchVisitorTab('ACTIVE')">
-                                Active Vehicles Inside (<span id="active-count-badge">0</span>)
-                            </button>
-                            <button class="tab-btn" id="tab-history-btn" onclick="switchVisitorTab('HISTORY')">
-                                Full History Log
-                            </button>
-                        </div>
-                        <div class="search-box" id="history-search-container" style="display: none;">
-                            <input type="text" id="visitor-search-input" placeholder="Search vehicle or flat..." oninput="handleSearchVisitors(this.value)">
-                        </div>
+                        <h4 class="card-title">Vehicles Currently Inside Society</h4>
+                        <button class="btn btn-outline btn-xs" onclick="navigateTo('history')">View Full History &rarr;</button>
                     </div>
-
-                    <div class="table-container">
-                        <table class="data-table" id="visitors-table">
+                    <div class="table-container mini-table">
+                        <table class="data-table">
                             <thead>
                                 <tr>
-                                    <th>Vehicle #</th>
-                                    <th>Slot</th>
-                                    <th>Flat Visited</th>
-                                    <th>Resident</th>
+                                    <th>Plate #</th>
+                                    <th>Bay</th>
+                                    <th>Flat</th>
                                     <th>Entry Time</th>
-                                    <th id="th-exit-or-status">Action</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
-                            <tbody id="visitors-tbody">
+                            <tbody id="dash-active-tbody">
                                 <!-- Populated dynamically -->
                             </tbody>
                         </table>
                     </div>
                 </div>
-            </section>
-        </main>
-    </div>
-
-    <!-- MODAL: Log Vehicle Entry -->
-    <div class="modal-overlay" id="modal-entry">
-        <div class="modal-box">
-            <div class="modal-header">
-                <div class="modal-title-group">
-                    <span class="modal-badge-icon">🚘</span>
-                    <h3>Register Vehicle Entry</h3>
-                </div>
-                <button class="modal-close-btn" onclick="closeModal('modal-entry')">&times;</button>
             </div>
-            <form id="form-entry" onsubmit="handleRegisterEntry(event)">
-                <div class="form-group">
-                    <label for="input-vehicle-number">Vehicle Registration Number</label>
-                    <input type="text" id="input-vehicle-number" class="form-control" placeholder="e.g. TN38AB1234" required autocomplete="off" style="text-transform: uppercase;">
-                    <span class="form-hint">Standard format: State + District + Series + Digits</span>
-                </div>
+        </section>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="select-flat">Flat Being Visited</label>
-                        <select id="select-flat" class="form-control" required>
-                            <option value="">Select Flat...</option>
-                        </select>
+        <!-- ========================================================
+             PAGE 2: LIVE PARKING BAY OVERVIEW (Dedicated Page)
+             ======================================================== -->
+        <section class="page-view" id="page-bays">
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title">Live Parking Bay Overview</h2>
+                    <p class="page-subtitle">Interactive visual status grid for all numbered society visitor parking slots.</p>
+                </div>
+                <div class="bay-controls">
+                    <div class="slot-filters">
+                        <button class="filter-pill active" data-filter="ALL" onclick="filterBays('ALL', this)">All Slots</button>
+                        <button class="filter-pill" data-filter="FREE" onclick="filterBays('FREE', this)">Available Only</button>
+                        <button class="filter-pill" data-filter="OCCUPIED" onclick="filterBays('OCCUPIED', this)">Occupied Only</button>
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="navigateTo('actions')">
+                        ➕ Assign a Bay
+                    </button>
+                </div>
+            </div>
+
+            <!-- Visual Grid of Parking Bays -->
+            <div class="bay-grid-container" id="bay-grid">
+                <!-- Dynamically populated bay cards -->
+            </div>
+        </section>
+
+        <!-- ========================================================
+             PAGE 3: QUICK ACTIONS (Dedicated Vehicle Entry & Checkout Page)
+             ======================================================== -->
+        <section class="page-view" id="page-actions">
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title">Quick Actions Station</h2>
+                    <p class="page-subtitle">Register new incoming visitor vehicles or instantly check out departing vehicles.</p>
+                </div>
+            </div>
+
+            <div class="actions-split-grid">
+                <!-- Action 1: Vehicle Entry Station -->
+                <div class="card action-station-card">
+                    <div class="station-header">
+                        <div class="station-icon bg-emerald">🚘</div>
+                        <div>
+                            <h3 class="station-title">Vehicle Check-In Station</h3>
+                            <p class="station-desc">Assign numbered slot and record entry timestamp.</p>
+                        </div>
                     </div>
 
-                    <div class="form-group">
-                        <label for="select-slot">Assign Parking Slot</label>
-                        <select id="select-slot" class="form-control" required>
-                            <option value="">Select Free Slot...</option>
-                        </select>
+                    <form id="action-entry-form" onsubmit="handleStationEntry(event)">
+                        <div class="form-group">
+                            <label for="station-vehicle-number">Vehicle Number Plate</label>
+                            <input type="text" id="station-vehicle-number" class="form-control input-plate" placeholder="e.g. TN38AB1234" required autocomplete="off" oninput="updatePlatePreview(this.value)">
+                            
+                            <!-- Real-time License Plate Preview -->
+                            <div class="plate-preview-box">
+                                <span class="plate-ind">IND</span>
+                                <span class="plate-text" id="preview-plate-text">TN 38 AB 1234</span>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="station-select-flat">Flat Being Visited</label>
+                                <select id="station-select-flat" class="form-control" required>
+                                    <option value="">Select Flat...</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="station-select-slot">Assign Free Parking Bay</label>
+                                <select id="station-select-slot" class="form-control" required>
+                                    <option value="">Select Free Slot...</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="rule-callout">
+                            🛡️ <strong>Service-Layer Rule:</strong> An occupied bay cannot be assigned twice. Server assigns <code>entryTime = NOW</code> automatically.
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-block btn-lg" id="btn-station-submit">
+                            ✅ Check In & Park Vehicle
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Action 2: Quick Checkout / Exit Station -->
+                <div class="card action-station-card">
+                    <div class="station-header">
+                        <div class="station-icon bg-rose">🚪</div>
+                        <div>
+                            <h3 class="station-title">Vehicle Check-Out Station</h3>
+                            <p class="station-desc">Record exit timestamp, free the slot, and save visit history.</p>
+                        </div>
+                    </div>
+
+                    <div class="station-body">
+                        <div class="form-group">
+                            <label>Select Parked Vehicle to Check Out:</label>
+                            <div class="search-box mb-2">
+                                <input type="text" class="form-control" id="checkout-search" placeholder="Filter by vehicle or flat..." oninput="filterCheckoutList(this.value)">
+                            </div>
+                        </div>
+
+                        <div class="checkout-vehicle-list" id="checkout-vehicle-list">
+                            <!-- Populated with parked vehicles ready to exit -->
+                        </div>
                     </div>
                 </div>
-
-                <div class="modal-alert-box alert-info">
-                    ℹ️ <strong>Business Rule Enforced:</strong> The server will verify the slot is currently free and timestamp entry automatically. Occupied slots cannot be double-booked.
-                </div>
-
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal('modal-entry')">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="btn-submit-entry">Confirm & Park Vehicle</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- MODAL: Daily Visitor Report -->
-    <div class="modal-overlay" id="modal-report">
-        <div class="modal-box modal-wide">
-            <div class="modal-header">
-                <div class="modal-title-group">
-                    <span class="modal-badge-icon">📊</span>
-                    <h3>Daily Society Visitor Report</h3>
-                </div>
-                <button class="modal-close-btn" onclick="closeModal('modal-report')">&times;</button>
             </div>
-            
-            <div class="report-controls">
-                <div class="date-picker-group">
-                    <label for="report-date-input">Select Date:</label>
-                    <input type="date" id="report-date-input" class="form-control date-input" onchange="loadDailyReport(this.value)">
-                </div>
-                <div class="report-summary-badges">
-                    <span class="badge badge-indigo">Total: <strong id="rep-stat-total">0</strong></span>
-                    <span class="badge badge-rose">Still Inside: <strong id="rep-stat-inside">0</strong></span>
-                    <span class="badge badge-emerald">Exited: <strong id="rep-stat-exited">0</strong></span>
-                </div>
-            </div>
+        </section>
 
-            <div class="table-container report-table-container">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Vehicle Number</th>
-                            <th>Slot</th>
-                            <th>Flat</th>
-                            <th>Resident</th>
-                            <th>Entry Time</th>
-                            <th>Exit Time</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="report-tbody">
-                        <!-- Populated dynamically -->
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="closeModal('modal-report')">Close</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL: Switch / Login User -->
-    <div class="modal-overlay" id="modal-auth">
-        <div class="modal-box">
-            <div class="modal-header">
-                <div class="modal-title-group">
-                    <span class="modal-badge-icon">🔐</span>
-                    <h3>Switch User Account</h3>
+        <!-- ========================================================
+             PAGE 4: VISITOR HISTORY & DAILY REPORTS (Dedicated Page)
+             ======================================================== -->
+        <section class="page-view" id="page-history">
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title">Visitor History & Daily Reports</h2>
+                    <p class="page-subtitle">Complete audit logs, historical records, and daily society visitor reports.</p>
                 </div>
-                <button class="modal-close-btn" onclick="closeModal('modal-auth')">&times;</button>
-            </div>
-            <form id="form-auth" onsubmit="handleLogin(event)">
-                <div class="form-group">
-                    <label for="input-username">Username</label>
-                    <input type="text" id="input-username" class="form-control" placeholder="admin or security1" required autocomplete="username">
-                </div>
-
-                <div class="form-group">
-                    <label for="input-password">Password</label>
-                    <input type="password" id="input-password" class="form-control" placeholder="Password" required autocomplete="current-password">
-                </div>
-
-                <div class="quick-credentials">
-                    <p class="quick-title">Quick Demo Logins:</p>
-                    <div class="quick-btn-group">
-                        <button type="button" class="btn btn-xs btn-outline" onclick="fillCredentials('security1', 'password123')">👮 Security Guard (security1)</button>
-                        <button type="button" class="btn btn-xs btn-outline" onclick="fillCredentials('admin', 'admin123')">👑 Admin (admin)</button>
+                <div class="history-controls">
+                    <div class="date-picker-wrap">
+                        <label for="history-date-picker">Filter Date:</label>
+                        <input type="date" id="history-date-picker" class="form-control date-input" onchange="handleHistoryDateChange(this.value)">
                     </div>
+                    <button class="btn btn-secondary btn-sm" onclick="resetHistoryFilters()">
+                        View All History
+                    </button>
+                </div>
+            </div>
+
+            <!-- Report Metric Badges -->
+            <div class="report-stats-strip">
+                <div class="report-badge-box">
+                    <span class="report-badge-label">Selected Date</span>
+                    <strong class="report-badge-val" id="hist-selected-date">Today</strong>
+                </div>
+                <div class="report-badge-box">
+                    <span class="report-badge-label">Total Visits</span>
+                    <strong class="report-badge-val text-primary" id="hist-stat-total">0</strong>
+                </div>
+                <div class="report-badge-box">
+                    <span class="report-badge-label">Still Parked</span>
+                    <strong class="report-badge-val text-rose" id="hist-stat-parked">0</strong>
+                </div>
+                <div class="report-badge-box">
+                    <span class="report-badge-label">Completed Exits</span>
+                    <strong class="report-badge-val text-emerald" id="hist-stat-exited">0</strong>
+                </div>
+            </div>
+
+            <!-- History Table Card -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="table-search-box">
+                        <input type="text" id="history-text-filter" placeholder="Search by vehicle, flat, or resident..." oninput="filterHistoryTable(this.value)">
+                    </div>
+                    <span class="records-count" id="history-records-count">Showing 0 records</span>
                 </div>
 
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal('modal-auth')">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Sign In & Generate JWT</button>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Vehicle Number</th>
+                                <th>Parking Bay</th>
+                                <th>Flat</th>
+                                <th>Resident</th>
+                                <th>Entry Time</th>
+                                <th>Exit Time</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-tbody">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
                 </div>
-            </form>
-        </div>
+            </div>
+        </section>
     </div>
 
     <!-- Toast Notification Container -->

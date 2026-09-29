@@ -247,6 +247,9 @@
                     <button class="btn btn-primary btn-sm" onclick="navigateTo('actions')">
                         ➕ Assign a Bay
                     </button>
+                    <button class="btn btn-secondary btn-sm" id="btn-admin-add-slot" onclick="openAddSlotModal()" style="display: none;">
+                        🏗️ Add New Bay
+                    </button>
                 </div>
             </div>
 
@@ -418,6 +421,27 @@
 
     <!-- Toast Notification Container -->
     <div class="toast-container" id="toast-container"></div>
+
+    <!-- Add Slot Modal (Admin Only) -->
+    <div class="modal-backdrop" id="add-slot-modal" style="display: none;" onclick="if(event.target === this) closeAddSlotModal()">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>🏗️ Add New Parking Bay</h3>
+                <button type="button" class="modal-close-btn" onclick="closeAddSlotModal()">&times;</button>
+            </div>
+            <p class="modal-subtitle">Admin Action: Expand society parking capacity by creating a new numbered bay.</p>
+            <form id="create-slot-form" onsubmit="handleCreateSlotSubmit(event)">
+                <div class="form-group">
+                    <label for="new-slot-number">New Slot Number (Positive Integer)</label>
+                    <input type="number" id="new-slot-number" class="form-control" placeholder="e.g. 11" min="1" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeAddSlotModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btn-submit-create-slot">➕ Add Bay</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script src="app.js"></script>
 </body>

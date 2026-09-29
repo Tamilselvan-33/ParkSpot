@@ -130,6 +130,11 @@ function updateUserBadge() {
     if (nameEl) nameEl.textContent = currentUser.username;
     if (roleEl) roleEl.textContent = currentUser.role.replace('ROLE_', '');
     if (avatarEl) avatarEl.textContent = currentUser.role.includes('ADMIN') ? '👑' : '👮';
+
+    const adminAddBtn = document.getElementById('btn-admin-add-slot');
+    if (adminAddBtn) {
+        adminAddBtn.style.display = currentUser.role.includes('ADMIN') ? 'inline-flex' : 'none';
+    }
 }
 
 function getHeaders() {
@@ -314,6 +319,11 @@ function renderBays() {
                     <button class="btn btn-secondary btn-xs btn-block" onclick="event.stopPropagation(); goToAssignSlot(${slot.id})">
                         + Assign Bay
                     </button>
+                    ${currentUser && currentUser.role && currentUser.role.includes('ADMIN') ? `
+                        <button class="btn btn-danger btn-xs btn-block" style="margin-top: 6px; opacity: 0.85;" onclick="event.stopPropagation(); deleteParkingSlot(${slot.id}, ${slot.slotNumber})">
+                            🗑️ Delete Bay
+                        </button>
+                    ` : ''}
                 ` : `
                     <div class="number-plate">${escapeHtml(slot.vehicleNumber || 'OCCUPIED')}</div>
                     <div class="slot-details">
@@ -686,3 +696,93 @@ function escapeHtml(str) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
+// ========================================================
+// ADMIN MANAGEMENT: ADD & DELETE PARKING BAYS
+// ========================================================
+function openAddSlotModal() {
+    const modal = document.getElementById('add-slot-modal');
+    const input = document.getElementById('new-slot-number');
+    if (modal) modal.style.display = 'flex';
+    if (input) {
+        // Suggest next slot number
+        const maxSlot = allSlots.length > 0 ? Math.max(...allSlots.map(s => s.slotNumber)) : 0;
+        input.value = maxSlot + 1;
+        setTimeout(() => input.focus(), 60);
+    }
+}
+
+function closeAddSlotModal() {
+    const modal = document.getElementById('add-slot-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function handleCreateSlotSubmit(e) {
+    e.preventDefault();
+    const input = document.getElementById('new-slot-number');
+    const slotNumber = parseInt(input.value, 10);
+    const btn = document.getElementById('btn-submit-create-slot');
+
+    if (!slotNumber || slotNumber < 1) {
+        showToast('Please enter a valid positive slot number', 'error');
+        return;
+    }
+
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Creating...';
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/api/parking-slots`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ slotNumber })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            showToast(`⚠️ ${data.message || 'Failed to create slot'}`, 'error');
+            return;
+        }
+
+        showToast(`🎉 Parking Bay #${data.slotNumber} created successfully!`, 'success');
+        closeAddSlotModal();
+        await refreshAllData(true);
+    } catch (err) {
+        console.error(err);
+        showToast('Network error while creating parking slot.', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '➕ Add Bay';
+        }
+    }
+}
+
+async function deleteParkingSlot(slotId, slotNumber) {
+    if (!confirm(`Are you sure you want to permanently remove Parking Bay #${slotNumber}?`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/api/parking-slots/${slotId}`, {
+            method: 'DELETE',
+            headers: getHeaders()
+        });
+
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            showToast(`⚠️ ${data.message || 'Could not delete slot'}`, 'error');
+            return;
+        }
+
+        showToast(`🗑️ Parking Bay #${slotNumber} removed successfully.`, 'info');
+        await refreshAllData(true);
+    } catch (err) {
+        console.error(err);
+        showToast('Network error while deleting slot.', 'error');
+    }
+}
+

@@ -378,15 +378,48 @@ function updatePlatePreview(val) {
     }
 }
 
+function setStationAlert(message, type = 'error') {
+    const alertBox = document.getElementById('station-inline-alert');
+    if (!alertBox) return;
+    alertBox.className = `inline-feedback-alert show alert-${type}`;
+    alertBox.innerHTML = `<span>${message}</span>`;
+    alertBox.style.display = 'flex';
+}
+
+function clearStationAlert() {
+    const alertBox = document.getElementById('station-inline-alert');
+    if (!alertBox) return;
+    alertBox.className = 'inline-feedback-alert';
+    alertBox.style.display = 'none';
+    alertBox.innerHTML = '';
+}
+
 async function handleStationEntry(e) {
     e.preventDefault();
-    const vehicleNumber = document.getElementById('station-vehicle-number').value.trim().toUpperCase();
-    const flatId = parseInt(document.getElementById('station-select-flat').value, 10);
-    const slotId = parseInt(document.getElementById('station-select-slot').value, 10);
+    clearStationAlert();
 
-    if (!vehicleNumber || !flatId || !slotId) {
+    const btn = document.getElementById('btn-station-submit');
+    const originalText = btn ? btn.innerHTML : '✅ Check In & Park Vehicle';
+
+    const vehicleInput = document.getElementById('station-vehicle-number');
+    const flatSelect = document.getElementById('station-select-flat');
+    const slotSelect = document.getElementById('station-select-slot');
+
+    const vehicleNumber = vehicleInput ? vehicleInput.value.trim().replace(/\s+/g, ' ').toUpperCase() : '';
+    const flatId = flatSelect ? parseInt(flatSelect.value, 10) : NaN;
+    const slotId = slotSelect ? parseInt(slotSelect.value, 10) : NaN;
+
+    if (!vehicleNumber || isNaN(flatId) || isNaN(slotId)) {
         showToast('Please complete all check-in fields', 'error');
+        setStationAlert('⚠️ Please complete all check-in fields (Plate, Flat, and Bay).', 'error');
         return;
+    }
+
+    // Disable button to prevent double-click / rapid concurrent requests
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Registering Entry...';
+        btn.style.opacity = '0.7';
     }
 
     try {
@@ -399,17 +432,26 @@ async function handleStationEntry(e) {
         const data = await res.json();
 
         if (res.status === 409) {
-            // Strict business rule violation
-            showToast(`🛑 ${data.message || 'Slot is already occupied!'}`, 'error');
+            // Strict business rule violation: Slot occupied
+            const msg = `🛑 Slot Occupied: ${data.message || 'This parking bay is already occupied.'}`;
+            showToast(msg, 'error');
+            setStationAlert(msg, 'error');
             return;
         }
 
         if (!res.ok) {
-            showToast(`⚠️ ${data.message || 'Entry check-in failed'}`, 'error');
+            // Business rule violation (e.g. vehicle already inside)
+            const msg = `⚠️ Check-In Rejected: ${data.message || 'Entry check-in failed'}`;
+            showToast(msg, 'error');
+            setStationAlert(msg, 'error');
             return;
         }
 
-        showToast(`✅ Vehicle ${data.vehicleNumber} checked in to Slot ${data.slotNumber}!`, 'success');
+        // Success
+        const successMsg = `✅ Vehicle ${data.vehicleNumber} successfully checked in to Slot ${data.slotNumber}!`;
+        showToast(successMsg, 'success');
+        setStationAlert(successMsg, 'success');
+
         document.getElementById('action-entry-form').reset();
         updatePlatePreview('');
 
@@ -417,6 +459,13 @@ async function handleStationEntry(e) {
     } catch (err) {
         console.error(err);
         showToast('Network error while checking in vehicle.', 'error');
+        setStationAlert('Network error while connecting to Spring Boot backend.', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            btn.style.opacity = '1';
+        }
     }
 }
 

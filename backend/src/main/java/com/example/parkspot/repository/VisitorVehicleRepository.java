@@ -22,6 +22,7 @@ public interface VisitorVehicleRepository extends JpaRepository<VisitorVehicle, 
 
     // Find if a vehicle is already parked inside
     Optional<VisitorVehicle> findByVehicleNumberAndExitTimeIsNull(String vehicleNumber);
+    Optional<VisitorVehicle> findByVehicleNumberIgnoreCaseAndExitTimeIsNull(String vehicleNumber);
 
     // Date range reports based on entryTime
     List<VisitorVehicle> findByEntryTimeBetweenOrderByEntryTimeDesc(LocalDateTime start, LocalDateTime end);

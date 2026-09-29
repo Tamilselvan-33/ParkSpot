@@ -42,12 +42,17 @@ public class VisitorService {
      */
     @Transactional
     public VisitorResponse registerEntry(VisitorEntryRequest request) {
+        if (request.getVehicleNumber() == null || request.getVehicleNumber().trim().isEmpty()) {
+            throw new InvalidActionException("Vehicle number cannot be empty.");
+        }
+        String cleanVehicleNumber = request.getVehicleNumber().trim().replaceAll("\\s+", " ").toUpperCase();
+
         // Validate flat existence
         Flat flat = flatRepository.findById(request.getFlatId())
                 .orElseThrow(() -> new ResourceNotFoundException("Flat with ID " + request.getFlatId() + " not found."));
 
-        // Validate parking slot existence
-        ParkingSlot slot = parkingSlotRepository.findById(request.getSlotId())
+        // Validate parking slot existence WITH PESSIMISTIC LOCK (prevents concurrent double-click race conditions)
+        ParkingSlot slot = parkingSlotRepository.findByIdWithLock(request.getSlotId())
                 .orElseThrow(() -> new ResourceNotFoundException("Parking slot with ID " + request.getSlotId() + " not found."));
 
         // Rule 1: A slot cannot be assigned twice while exitTime is NULL
@@ -56,13 +61,13 @@ public class VisitorService {
         }
 
         // Validate vehicle is not already parked inside society
-        if (visitorVehicleRepository.findByVehicleNumberAndExitTimeIsNull(request.getVehicleNumber()).isPresent()) {
-            throw new InvalidActionException("Vehicle " + request.getVehicleNumber() + " is already parked inside the society.");
+        if (visitorVehicleRepository.findByVehicleNumberIgnoreCaseAndExitTimeIsNull(cleanVehicleNumber).isPresent()) {
+            throw new InvalidActionException("Vehicle " + cleanVehicleNumber + " is already parked inside the society.");
         }
 
         // Rule 4: Server assigns entry timestamp
         VisitorVehicle visit = new VisitorVehicle(
-                request.getVehicleNumber().trim().toUpperCase(),
+                cleanVehicleNumber,
                 LocalDateTime.now(),
                 flat,
                 slot

@@ -1,0 +1,63 @@
+### 1. Login as Admin
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+> {% client.global.set("token", response.body.token); %}
+
+### 2. Login as Security
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "security1",
+  "password": "password123"
+}
+
+> {% client.global.set("token", response.body.token); %}
+
+### 3. Get All Parking Slots
+GET http://localhost:8080/api/parking-slots
+Authorization: Bearer {{token}}
+
+### 4. Normal Path: Log Vehicle Entry (Parks in Slot 5)
+POST http://localhost:8080/api/visitors
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "vehicleNumber": "TN38AB1234",
+  "flatId": 1,
+  "slotId": 5
+}
+
+### 5. Business Rule 1: Attempt Duplicate Slot 5 (Expects 409 Conflict)
+POST http://localhost:8080/api/visitors
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "vehicleNumber": "TN40CD5678",
+  "flatId": 2,
+  "slotId": 5
+}
+
+### 6. View Currently Occupied Slots
+GET http://localhost:8080/api/parking-slots/occupied
+Authorization: Bearer {{token}}
+
+### 7. Mark Vehicle Exit (Frees Slot 5)
+PUT http://localhost:8080/api/visitors/1/exit
+Authorization: Bearer {{token}}
+
+### 8. Business Rule 3: Attempt Exit Twice (Expects 400 Bad Request)
+PUT http://localhost:8080/api/visitors/1/exit
+Authorization: Bearer {{token}}
+
+### 9. Daily Visitor Report
+GET http://localhost:8080/api/reports/daily
+Authorization: Bearer {{token}}

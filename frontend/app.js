@@ -290,6 +290,12 @@ function renderDashboard() {
 // PAGE 2: PARKING BAYS RENDERING
 // ========================================================
 function renderBays() {
+    const adminAddBtn = document.getElementById('btn-admin-add-slot');
+    if (adminAddBtn) {
+        const isAdmin = currentUser && currentUser.role && currentUser.role.includes('ADMIN');
+        adminAddBtn.style.display = isAdmin ? 'inline-flex' : 'none';
+    }
+
     const grid = document.getElementById('bay-grid');
     if (!grid) return;
 
